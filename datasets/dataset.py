@@ -20,10 +20,11 @@ def remove_to_tensor(transform):
 
 
 class PreloadedDataset(Dataset):
-    def __init__(self, main_dir, shape, transform=None, shuffle=False, use_tqdm=True):
+    def __init__(self, main_dir, shape, transform=None, shuffle=False, use_tqdm=True, augment=False):
         self.main_dir = main_dir
         self.shape = shape
         self.transform = transform
+        self.augment = augment
         self.classes = os.listdir(main_dir)
         self.shuffled = shuffle #  This flag is useful for cross_val_split_by_class()  
         if '.DS_Store' in self.classes:
@@ -56,17 +57,15 @@ class PreloadedDataset(Dataset):
             #  This enables us to keep a virgin copy of the original images
             #  which we can use at each epoch to generate different transformed images
             #  Note: we must remember to call dataset.transform() when requesting transformed images
-        if self.transform is None:
-            self.transformed_images = self.images
-        else:
-            self.transformed_images = self.transform(self.images)
+        
+        self.apply_transform()
             
         if shuffle:
             self._shuffle()
         
     #  Useful for loading data which is stored in a different format to TinyImageNet30
-    def from_dataset(dataset, transform, device="cpu", use_tqdm=True):
-        preloaded_dataset = PreloadedDataset(None, dataset.__getitem__(0)[0].shape, use_tqdm=use_tqdm)
+    def from_dataset(dataset, transform, device="cpu", use_tqdm=True, augment=False):
+        preloaded_dataset = PreloadedDataset(None, dataset.__getitem__(0)[0].shape, use_tqdm=use_tqdm, augment=augment)
         data = []
         targets = []
         loop = tqdm(range(len(dataset)), leave=False) if use_tqdm else range(len(dataset))
@@ -86,10 +85,27 @@ class PreloadedDataset(Dataset):
         preloaded_dataset.transform = transform
         preloaded_dataset.images = torch.stack(data).to(device)
         preloaded_dataset.targets = torch.stack(targets).to(device)
-        if transform is not None:
-            preloaded_dataset.transformed_images = transform(torch.stack(data).to(device))
-        else:
-            preloaded_dataset.transformed_images = torch.stack(data).to(device)
+
+        preloaded_dataset.apply_transform()
+        
+        return preloaded_dataset
+
+    def from_tensors(data, targets, transform, device="cpu", use_tqdm=True, augment=False):
+        assert type(data) == torch.Tensor, "Data must be a torch.Tensor"
+        assert type(targets) == torch.Tensor, "Targets must be a torch.Tensor"
+
+        if data.device != device:
+            data = data.to(device)
+        if targets.device != device:
+            targets = targets.to(device)
+
+        preloaded_dataset = PreloadedDataset(None, data[0].shape, use_tqdm=use_tqdm, augment=augment)
+        preloaded_dataset.images = data
+        preloaded_dataset.targets = targets
+        preloaded_dataset.shape = data[0].shape
+        preloaded_dataset.device = device
+        preloaded_dataset.transform = transform
+        preloaded_dataset.apply_transform()
         
         return preloaded_dataset
             
@@ -104,7 +120,7 @@ class PreloadedDataset(Dataset):
             while low < len(self.images):
                 if high > len(self.images):
                     high = len(self.images)
-                self.transformed_images[low:high] = self.transform(self.images[low:high].to(device)).to(self.device)
+                self.transformed_images[low:high] = self.transform(self.images[low:high].to(device)).to(self.device).detach()
                 low += batch_size
                 high += batch_size
         
@@ -149,3 +165,23 @@ class PreloadedDataset(Dataset):
         assert self.images.dtype == self.transformed_images.dtype, "All images, targets, and transformed images must be on the same dtype"
         return self.images.dtype, self.targets.dtype
     
+
+def get_balanced_subset(data, labels, n_train: int, shuffle=True):
+    n_per_class = n_train // 10
+    train_data, train_labels, test_data, test_labels = [], [], [], []
+    for i in range(10):
+        indices = torch.where(labels == i)[0]
+        if shuffle:
+            shuffle_idx = torch.randperm(len(indices))
+            indices = indices[shuffle_idx]
+        train_data.append(data[indices[:n_per_class]])
+        train_labels.append(labels[indices[:n_per_class]])
+        test_data.append(data[indices[n_per_class:]])
+        test_labels.append(labels[indices[n_per_class:]])
+
+    train_data = torch.cat(train_data)
+    train_labels = torch.cat(train_labels)
+    test_data = torch.cat(test_data)
+    test_labels = torch.cat(test_labels)
+
+    return train_data, train_labels, test_data, test_labels

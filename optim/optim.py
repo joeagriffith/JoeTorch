@@ -1,7 +1,4 @@
 import torch
-import math
-
-
 
 def get_optimiser(model, optim='AdamW', betas=(0.9, 0.999), momentum=0.9, lr=99999.9, wd=99999.9):
 
@@ -22,20 +19,21 @@ def get_optimiser(model, optim='AdamW', betas=(0.9, 0.999), momentum=0.9, lr=999
     
     return optimiser
 
-def apply_weight_decay_with_prior(model, state_dict, weight_decay, fisher=None):
+def apply_weight_decay_with_prior(model, prior, weight_decay, fisher=None):
     """
     Apply weight decay to the model parameters towards the given state dict.
 
     Args:
         model: The model whose parameters will be decayed.
-        state_dict: The state dict to be used as the prior.
+        prior: A state dict of model parameters to which model parameters will be decayed.
         weight_decay: The weight decay value to be applied.
+        fisher: An optional state dict of model parameters which scales weight decay updates by parameter-wise importance.
     """
-
-    if fisher is None:
-        fisher = {name: torch.ones_like(param) for name, param in model.named_parameters()}
     
     with torch.no_grad():
         for name, param in model.named_parameters():
-            if name in state_dict:
-                param.grad += -(state_dict[name].data - param.data) * weight_decay * (fisher[name] / fisher[name].mean())
+            if name in prior:
+                if fisher is None:
+                    param.grad += -(prior[name].data - param.data) * weight_decay
+                else:
+                    param.grad += -(prior[name].data - param.data) * weight_decay * fisher[name]

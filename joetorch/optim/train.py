@@ -1,5 +1,5 @@
 import torch
-from datasets.dataset import PreloadedDataset
+from joetorch.datasets.dataset import PreloadedDataset
 from torch.utils.tensorboard import SummaryWriter
 from typing import Optional, Union, List, Dict
 from torch.utils.data import DataLoader

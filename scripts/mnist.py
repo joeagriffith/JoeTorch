@@ -3,7 +3,7 @@ import shutil
 import torch
 
 import sys
-sys.path.append('..')
+sys.path.append('../')
 
 from joetorch.datasets import MNIST
 from joetorch.nn import *

@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from datasets.dataset import embed_dataset
 
 def feature_std(x):
     # x: (N, C)

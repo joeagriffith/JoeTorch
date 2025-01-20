@@ -1,6 +1,6 @@
 import torch
-from nn.modules import MLP, EncBlock, DecBlock
-from functional.loss_functions import bce_recon_loss
+from joetorch.nn.modules import MLP, EncBlock, DecBlock
+from joetorch.functional.loss_functions import bce_recon_loss
 import torch.nn.functional as F
 
 def MNIST_MLP_Encoder(out_dim: int, layer_norm: bool=True):

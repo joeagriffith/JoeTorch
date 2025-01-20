@@ -1,3 +1,3 @@
 import subprocess
 
-subprocess.run(["python", "scripts/mnist.py"])
+subprocess.run(["python", "mnist.py"])

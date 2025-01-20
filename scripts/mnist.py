@@ -2,10 +2,13 @@ import os
 import shutil
 import torch
 
-from datasets import MNIST
-from nn import *
-from optim import *
-from logging import get_writer
+import sys
+sys.path.append('..')
+
+from joetorch.datasets import MNIST
+from joetorch.nn import *
+from joetorch.optim import *
+from joetorch.logging import get_writer
 
 # Training Hyperparameters
 experiment_name = 'mnist'

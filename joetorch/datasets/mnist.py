@@ -50,7 +50,7 @@ def MNIST(
     
     elif split == 'val':
         # Build val dataset
-        n_val = len(dataset) * val_ratio
+        n_val = int(len(dataset) * val_ratio)
         dataset = torch.utils.data.Subset(dataset, range(len(dataset) - n_val, len(dataset)))
         dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True, augment=augment)
     

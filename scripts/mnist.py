@@ -5,6 +5,8 @@ import torch
 import sys
 sys.path.append('../')
 
+print(sys.path)
+
 from joetorch.datasets import MNIST
 from joetorch.nn import *
 from joetorch.optim import *
@@ -35,19 +37,17 @@ test_dataset = MNIST(root=root, split='test', dtype=dtype, device=device, downlo
 if os.path.exists(log_dir + f'{experiment_name}/'):
     for f in os.listdir(log_dir + f'{experiment_name}/'):
         shutil.rmtree(log_dir + f'{experiment_name}/' + f)
-else:
-    os.makedirs(log_dir + f'{experiment_name}/')
 
 # MLP trial
 trial_name = 'mlp_ae'
-model = MNIST_AE(out_dim=20, mode='mlp')
+model = MNIST_AE(out_dim=20, mode='mlp').to(device)
 optimiser = get_optimiser(model, optim='AdamW')
 writer = get_writer(log_dir, experiment_name, trial_name)
 train(model, train_dataset, val_dataset, optimiser, num_epochs, batch_size, writer, compute_dtype=dtype, epoch_hyperparams=epoch_hyperparams)
 
 # CNN trial
 trial_name = 'cnn_ae'
-model = MNIST_AE(out_dim=20, mode='cnn')
+model = MNIST_AE(out_dim=20, mode='cnn').to(device)
 optimiser = get_optimiser(model, optim='AdamW')
 writer = get_writer(log_dir, experiment_name, trial_name)
 train(model, train_dataset, val_dataset, optimiser, num_epochs, batch_size, writer, compute_dtype=dtype, epoch_hyperparams=epoch_hyperparams)

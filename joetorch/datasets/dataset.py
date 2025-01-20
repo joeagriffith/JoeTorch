@@ -20,7 +20,7 @@ def remove_to_tensor(transform):
 
 
 class PreloadedDataset(Dataset):
-    def __init__(self, main_dir, shape, transform=None, shuffle=False, use_tqdm=True, augment=False):
+    def __init__(self, main_dir, shape, transform=None, shuffle=False, use_tqdm=True, augment=False, device='cpu'):
         self.main_dir = main_dir
         self.shape = shape
         self.transform = transform
@@ -30,15 +30,18 @@ class PreloadedDataset(Dataset):
         if '.DS_Store' in self.classes:
             self.classes.remove('.DS_Store')
             
-        self.images = torch.zeros(shape).to(self.device)
-        self.targets = torch.zeros(0).type(torch.LongTensor).to(self.device)
-        
+        self.images = None
+        self.targets = None
+        self.transformed_images = None
+
         pre_transform = transforms.ToTensor()
         self.transform = remove_to_tensor(transform)                
         
         #  preload images
         if self.main_dir is not None:
             loop = tqdm(enumerate(self.classes), total=len(self.classes), leave=False) if use_tqdm else enumerate(self.classes)
+            images = []
+            targets = []
             for class_idx, class_name in loop:
                 class_dir = os.path.join(self.main_dir, class_name)
                 image_names = os.listdir(class_dir)
@@ -50,15 +53,12 @@ class PreloadedDataset(Dataset):
                 class_images = torch.stack(class_images).to(self.device)
                 class_targets = (torch.ones(len(class_images)) * class_idx).type(torch.LongTensor).to(self.device)
 
-                self.images = torch.cat([self.images, class_images])
-                self.targets = torch.cat([self.targets, class_targets])
+                images.append(class_images)
+                targets.append(class_targets)
             
-            #  Transformed_images stores a transformed copy of images.
-            #  This enables us to keep a virgin copy of the original images
-            #  which we can use at each epoch to generate different transformed images
-            #  Note: we must remember to call dataset.transform() when requesting transformed images
-        
-        self.apply_transform()
+            self.images = torch.cat(images)
+            self.targets = torch.cat(targets)
+            self.update_transformed_images()
             
         if shuffle:
             self._shuffle()
@@ -81,12 +81,10 @@ class PreloadedDataset(Dataset):
         transform = remove_to_tensor(transform)
         
         preloaded_dataset.shape = data[0].shape
-        preloaded_dataset.device = device
         preloaded_dataset.transform = transform
         preloaded_dataset.images = torch.stack(data).to(device)
         preloaded_dataset.targets = torch.stack(targets).to(device)
-
-        preloaded_dataset.apply_transform()
+        preloaded_dataset.update_transformed_images()
         
         return preloaded_dataset
 
@@ -105,24 +103,35 @@ class PreloadedDataset(Dataset):
         preloaded_dataset.shape = data[0].shape
         preloaded_dataset.device = device
         preloaded_dataset.transform = transform
-        preloaded_dataset.apply_transform()
+        preloaded_dataset.update_transformed_images()
         
         return preloaded_dataset
             
     #  Transforms the data in batches so as not to overload memory
-    def apply_transform(self, device=torch.device('cuda'), batch_size=500):
-        if self.transform is not None:
-            if device is None:
-                device = self.device
-            
-            low = 0
-            high = batch_size
-            while low < len(self.images):
-                if high > len(self.images):
-                    high = len(self.images)
-                self.transformed_images[low:high] = self.transform(self.images[low:high].to(device)).to(self.device).detach()
-                low += batch_size
-                high += batch_size
+    def update_transformed_images(self, transform_device=torch.device('cuda'), batch_size=500):
+        if self.transform is None:
+            self.transformed_images = self.images
+            return
+
+        if self.transformed_images is None:
+            self.transformed_images = torch.zeros_like(self.images)
+        elif self.transformed_images.device != self.images.device:
+            self.transformed_images = self.transformed_images.to(self.images.device)
+        elif self.transformed_images.dtype != self.images.dtype:
+            self.transformed_images = self.transformed_images.to(self.images.dtype)
+
+        if transform_device is None:
+            transform_device = self.device
+        
+        low = 0
+        high = batch_size
+        while low < len(self.images):
+            if high > len(self.images):
+                high = len(self.images)
+
+            self.transformed_images[low:high] = self.transform(self.images[low:high].to(transform_device)).to(self.device).detach()
+            low += batch_size
+            high += batch_size
         
         
     #  Now a man who needs no introduction
@@ -157,7 +166,8 @@ class PreloadedDataset(Dataset):
     
     @property
     def device(self):
-        assert self.images.device == self.targets.device == self.transformed_images.device, "All images, targets, and transformed images must be on the same device"
+        assert self.images.device == self.targets.device, f"Images and targets must be on the same device, {self.images.device} != {self.targets.device}"
+        assert self.images.device == self.transformed_images.device, f"Images and transformed images must be on the same device, {self.images.device} != {self.transformed_images.device}"
         return self.images.device
     
     @property

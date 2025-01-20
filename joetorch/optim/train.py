@@ -32,7 +32,7 @@ def train(
         mixed_precision: Whether to use mixed precision.
         epoch_hyperparams: The hyperparameters to use for each epoch.
     """
-
+    compute_device = next(model.parameters()).device
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -42,9 +42,9 @@ def train(
         # ============================ DATA AUGMENTATION ============================
 
         if hasattr(train_dataset, 'augment') and train_dataset.augment:   
-            train_dataset.apply_transforms()
+            train_dataset.update_transformed_images()
         if hasattr(val_dataset, 'augment') and val_dataset.augment:
-            val_dataset.apply_transforms()
+            val_dataset.update_transformed_images()
         
         # ========================== HYPERPARAMETER UPDATE ==========================
 
@@ -66,7 +66,7 @@ def train(
         epoch_train_metrics = {}
         for batch in train_loader:
             optimiser.zero_grad()
-            with torch.autocast(device_type=model.device.type, dtype=compute_dtype, enabled=compute_dtype is not None):
+            with torch.autocast(device_type=compute_device.type, dtype=compute_dtype, enabled=compute_dtype is not None):
                 train_metrics = model.loss(batch, **epoch_loss_args)
                 train_metrics['loss'].backward()
                 optimiser.step()
@@ -82,7 +82,7 @@ def train(
         epoch_val_metrics = {}
         for batch in val_loader:
             with torch.no_grad():
-                with torch.autocast(device_type=model.device.type, dtype=compute_dtype, enabled=compute_dtype is not None):
+                with torch.autocast(device_type=compute_device.type, dtype=compute_dtype, enabled=compute_dtype is not None):
                     val_metrics = model.loss(batch, **epoch_loss_args)
 
             for key, value in val_metrics.items():

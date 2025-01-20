@@ -28,3 +28,16 @@ def smooth_nll_loss(x:torch.Tensor, target:torch.Tensor, beta:float=0.1):
     nll_loss = -log_probs.gather(dim=-1, index=target.unsqueeze(1)).squeeze(1)
     mean_log_probs = log_probs.mean(dim=-1)
     return nll_loss + beta * mean_log_probs
+
+def bce_recon_loss(x_hat:torch.Tensor, x:torch.Tensor):
+    dims = tuple(range(1, len(x.shape)))
+    return F.binary_cross_entropy(x_hat, x, reduction='none').sum(dims).mean()
+
+def kl_loss(mu:torch.Tensor, logvar:torch.Tensor):
+    dims = tuple(range(1, len(mu.shape)))
+    return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dims).mean()
+
+def vae_loss(x_hat:torch.Tensor, x:torch.Tensor, mu:torch.Tensor, logvar:torch.Tensor, beta:float=1.0):
+    recon_loss = bce_recon_loss(x_hat, x)
+    kl_loss = kl_loss(mu, logvar)
+    return recon_loss + beta * kl_loss

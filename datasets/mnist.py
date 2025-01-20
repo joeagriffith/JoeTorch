@@ -12,11 +12,11 @@ def FashionMNIST(root, split, val_ratio=0.1, normalize=False, transform=None, dt
 def MNIST(
         root, 
         split, 
-        val_ratio=0.1,
+        val_ratio=0.0,
         normalize=True,
         augment=False,
         transforms=None, 
-        dtype='float32',
+        dtype=torch.float32,
         device='cpu', 
         download=True,
         fashion=False,

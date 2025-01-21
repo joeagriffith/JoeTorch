@@ -19,7 +19,7 @@ def get_optimiser(model, optim='AdamW', betas=(0.9, 0.999), momentum=0.9, lr=999
     
     return optimiser
 
-def apply_weight_decay_with_prior(model, prior, weight_decay, fisher=None):
+def apply_weight_decay_with_prior(model, prior, weight_decay, lr, fisher=None):
     """
     Apply weight decay to the model parameters towards the given state dict.
 
@@ -27,6 +27,7 @@ def apply_weight_decay_with_prior(model, prior, weight_decay, fisher=None):
         model: The model whose parameters will be decayed.
         prior: A state dict of model parameters to which model parameters will be decayed.
         weight_decay: The weight decay value to be applied.
+        lr: The learning rate value to be applied.
         fisher: An optional state dict of model parameters which scales weight decay updates by parameter-wise importance.
     """
     
@@ -34,6 +35,6 @@ def apply_weight_decay_with_prior(model, prior, weight_decay, fisher=None):
         for name, param in model.named_parameters():
             if name in prior:
                 if fisher is None:
-                    param.grad += -(prior[name].data - param.data) * weight_decay
+                    param.data += (prior[name].data - param.data) * weight_decay * lr
                 else:
-                    param.grad += -(prior[name].data - param.data) * weight_decay * fisher[name]
+                    param.data += (prior[name].data - param.data) * weight_decay * lr * fisher[name]

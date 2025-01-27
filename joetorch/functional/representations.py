@@ -2,10 +2,24 @@ import torch
 import torch.nn.functional as F
 
 def feature_std(x):
+    """
+    Compute the standard deviation of the features.
+    Args:
+        x: torch.Tensor, the input tensor.
+    Returns:
+        torch.Tensor, the computed standard deviation.
+    """
     # x: (N, C)
     return x.std(dim=0).mean()
 
-def feature_entropy(x):
+def feature_std_entropy(x):
+    """
+    Compute the entropy of the standard deviations of the features.
+    Args:
+        x: torch.Tensor, the input tensor.
+    Returns:
+        torch.Tensor, the computed entropy.
+    """
     # x: (N, C)
     stds = x.std(dim=0) # stds: (C,)
     normalised = torch.softmax(stds, dim=0) # normalised: (C,)
@@ -13,6 +27,15 @@ def feature_entropy(x):
     return entropy
 
 def feature_correlation_matrix(x, standardise:bool=True, unbiased:bool=True):
+    """
+    Compute the correlation matrix of the features.
+    Args:
+        x: torch.Tensor, the input tensor.
+        standardise: bool, whether to standardise the features.
+        unbiased: bool, whether to use the unbiased estimation of the correlation matrix. Use unbiased=True when evaluating encoder or population, and unbiased=False when evaluating the batch.
+    Returns:
+        torch.Tensor, the computed correlation matrix.
+    """
     # x: (N, C)
     if x.size(0) <= 1:
         return torch.tensor(0.0, device=x.device)

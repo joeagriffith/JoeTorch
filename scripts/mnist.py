@@ -3,7 +3,8 @@ import shutil
 import torch
 
 import sys
-sys.path.append('../')
+sys.path.append('../') # if run from inside scripts
+sys.path.append('') # if run from root
 
 print(sys.path)
 
@@ -14,7 +15,7 @@ from joetorch.logging import get_writer
 
 # Training Hyperparameters
 experiment_name = 'mnist'
-log_dir = 'test/out/'
+log_dir = 'out/'
 num_epochs = 50
 batch_size = 256
 start_lr, end_lr = 1e-3, 1e-4
@@ -32,11 +33,6 @@ val_ratio = 0.1
 train_dataset = MNIST(root=root, split='train', val_ratio=val_ratio, augment=True, dtype=dtype, device=device, download=False)
 val_dataset = MNIST(root=root, split='val', val_ratio=val_ratio, dtype=dtype, device=device, download=False)
 test_dataset = MNIST(root=root, split='test', dtype=dtype, device=device, download=False)
-
-# Clear previous experiment
-if os.path.exists(log_dir + f'{experiment_name}/'):
-    for f in os.listdir(log_dir + f'{experiment_name}/'):
-        shutil.rmtree(log_dir + f'{experiment_name}/' + f)
 
 # MLP trial
 trial_name = 'mlp_ae'

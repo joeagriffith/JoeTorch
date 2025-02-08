@@ -1,6 +1,6 @@
 Metadata-Version: 2.2
 Name: joetorch
-Version: 0.0.16
+Version: 0.0.18
 Summary: Useful code for testing new Deep Learning algorithms.
 Author-email: Joe Griffith <joeagriffith@gmail.com>
 Classifier: Programming Language :: Python :: 3

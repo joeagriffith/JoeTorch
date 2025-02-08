@@ -15,7 +15,7 @@ class EncBlock(torch.nn.Module):
         if bn:
             modules.append(torch.nn.BatchNorm2d(out_dim))
         if dropout > 0.0:
-            modules.append(torch.nn.Dropout(dropout))
+            modules.append(torch.nn.Dropout2d(dropout))
         if actv_layer is not None:
             modules.append(actv_layer)
         self.net = torch.nn.Sequential(*modules)
@@ -43,7 +43,7 @@ class DecBlock(torch.nn.Module):
         if bn:
             modules.append(torch.nn.BatchNorm2d(out_dim))
         if dropout > 0.0:
-            modules.append(torch.nn.Dropout(dropout))
+            modules.append(torch.nn.Dropout2d(dropout))
         if actv_layer is not None:
             modules.append(actv_layer)
         self.net = torch.nn.Sequential(*modules)
@@ -57,10 +57,10 @@ class DecBlock(torch.nn.Module):
                 skip = x
             y += skip
         return y
-        
+
         
 class ConvResBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, scale: float = 1.0):
+    def __init__(self, in_channels: int, out_channels: int, scale: float = 1.0, dropout: float = 0.0):
         super().__init__()
 
         self.scale = scale
@@ -69,6 +69,12 @@ class ConvResBlock(nn.Module):
             self.down = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=0)
         elif scale > 1.0:
             self.up = nn.Upsample(scale_factor=scale)
+
+        if dropout > 0.0:
+            self.do_dropout = True
+            self.dropout = nn.Dropout2d(dropout)
+        else:
+            self.do_dropout = False
 
         self.groupnorm_1 = nn.GroupNorm(32, in_channels)
         self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
@@ -91,10 +97,14 @@ class ConvResBlock(nn.Module):
 
         x = self.groupnorm_1(x)
         x = F.silu(x)
+        if self.do_dropout:
+            x = self.dropout(x)
         x = self.conv_1(x)
 
         x = self.groupnorm_2(x)
         x = F.silu(x)
+        if self.do_dropout:
+            x = self.dropout(x)
         x = self.conv_2(x)
 
         x = x + self.residual_layer(residual)

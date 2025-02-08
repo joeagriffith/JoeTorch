@@ -15,7 +15,7 @@ from joetorch.logging import get_writer
 
 # Training Hyperparameters
 experiment_name = 'mnist'
-log_dir = 'out/'
+out_dir = 'test/out/'
 num_epochs = 50
 batch_size = 256
 start_lr, end_lr = 1e-3, 1e-4
@@ -35,15 +35,17 @@ val_dataset = MNIST(root=root, split='val', val_ratio=val_ratio, dtype=dtype, de
 test_dataset = MNIST(root=root, split='test', dtype=dtype, device=device, download=False)
 
 # MLP trial
-trial_name = 'mlp_ae'
+trial_name = 'mlp_ae_mseloss'
 model = MNIST_AE(out_dim=20, mode='mlp').to(device)
 optimiser = get_optimiser(model, optim='AdamW')
-writer = get_writer(log_dir, experiment_name, trial_name)
-train(model, train_dataset, val_dataset, optimiser, num_epochs, batch_size, writer, compute_dtype=dtype, epoch_hyperparams=epoch_hyperparams)
+writer = get_writer(out_dir, experiment_name, trial_name)
+save_dir = out_dir + f'{experiment_name}/models/{trial_name}'
+train(model, train_dataset, optimiser, num_epochs, batch_size, val_dataset, writer, compute_dtype=dtype, epoch_hyperparams=epoch_hyperparams, save_dir=save_dir)
 
 # CNN trial
-trial_name = 'cnn_ae'
+trial_name = 'cnn_ae_mseloss'
 model = MNIST_AE(out_dim=20, mode='cnn').to(device)
 optimiser = get_optimiser(model, optim='AdamW')
-writer = get_writer(log_dir, experiment_name, trial_name)
-train(model, train_dataset, val_dataset, optimiser, num_epochs, batch_size, writer, compute_dtype=dtype, epoch_hyperparams=epoch_hyperparams)
+writer = get_writer(out_dir, experiment_name, trial_name)
+save_dir = out_dir + f'{experiment_name}/models/{trial_name}'
+train(model, train_dataset, optimiser, num_epochs, batch_size, val_dataset, writer, compute_dtype=dtype, epoch_hyperparams=epoch_hyperparams, save_dir=save_dir)

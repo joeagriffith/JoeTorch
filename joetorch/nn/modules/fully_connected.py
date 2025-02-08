@@ -23,8 +23,5 @@ class MLP(torch.nn.Module):
         self.out_dim = out_dim
         self.net = torch.nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor, out_shape: tuple=None):
-        out = self.net(x.flatten(start_dim=1))
-        if out_shape is not None:
-            out = out.view(out.size(0), *out_shape)
-        return out
+    def forward(self, x: torch.Tensor):
+        return self.net(x)

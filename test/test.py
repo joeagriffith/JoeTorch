@@ -7,4 +7,4 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env = os.environ.copy()
 env["PYTHONPATH"] = project_root
 
-subprocess.run(["python", "scripts/mnist.py"], env=env)
+subprocess.run(["python", "test/mnist.py"], env=env)

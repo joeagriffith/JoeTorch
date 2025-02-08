@@ -1,6 +1,5 @@
 import torch
 from joetorch.nn.modules import MLP, EncBlock, DecBlock
-from joetorch.functional.loss_functions import bce_recon_loss, mse_recon_loss
 import torch.nn.functional as F
 
 def MNIST_MLP_Encoder(out_dim: int, layer_norm: bool=True):
@@ -77,5 +76,5 @@ class MNIST_AE(torch.nn.Module):
     def loss(self, batch, **kwargs):
         x, _ = batch
         x_hat = self.forward(x)
-        # return {'loss': bce_recon_loss(x_hat, x), 'mse': F.mse_loss(x_hat, x)}
-        return {'loss': mse_recon_loss(x_hat, x), 'mse': F.mse_loss(x_hat, x)}
+        mse = F.mse_loss(x_hat, x)
+        return {'loss': mse, 'mse': mse}

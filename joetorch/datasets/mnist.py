@@ -17,7 +17,7 @@ def MNIST(
         augment=False,
         transform=None, 
         dtype=torch.float32,
-        device='cpu', 
+        device=torch.device('cpu'),
         download=True,
         fashion=False,
     ):
@@ -31,12 +31,14 @@ def MNIST(
     else:
         dataset = datasets.MNIST(root=root, train=train, transform=loading_transform, download=download)
 
+    fill_value = dataset[0][0].min().item()
+
     if transform is None:
         transform = []
     if type(transform) is not list:
         transform = [transform]
     if augment:
-        transform = [transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10)] + transform
+        transform = [transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10, fill=fill_value)] + transform
     if len(transform) > 0:
         transform = transforms.Compose(transform)
     else:
@@ -46,17 +48,17 @@ def MNIST(
         # Build train dataset
         n_train = int(len(dataset) * (1 - val_ratio))
         dataset = torch.utils.data.Subset(dataset, range(0, n_train))
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True, augment=augment)
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True)
     
     elif split == 'val':
         # Build val dataset
         n_val = int(len(dataset) * val_ratio)
         dataset = torch.utils.data.Subset(dataset, range(len(dataset) - n_val, len(dataset)))
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True, augment=augment)
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True)
     
     elif split == 'test':
-        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True, augment=augment)
+        dataset = PreloadedDataset.from_dataset(dataset, transform, device, use_tqdm=True)
 
-    dataset = dataset.to_dtype(dtype).to(device)
+    dataset = dataset.to(dtype).to(device)
 
     return dataset

@@ -78,6 +78,9 @@ def train(
         for batch in train_loader:
             optimiser.zero_grad()
             with torch.autocast(device_type=compute_device.type, dtype=compute_dtype, enabled=compute_dtype is not None):
+                if 'train_metrics' in locals():
+                    del train_metrics
+                    torch.cuda.empty_cache()
                 train_metrics = model.loss(batch, **epoch_loss_args)
                 train_metrics['loss'].backward()
                 optimiser.step()

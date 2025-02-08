@@ -30,33 +30,33 @@ class EncBlock(torch.nn.Module):
             y += skip
         return y
 
-class DecBlock(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, kernel_size, stride=1, padding=0, upsample=False, bn=False, dropout=0.0, actv_layer=torch.nn.SiLU(), skip_connection=False):
-        super().__init__()
-        self.upsample = upsample
-        self.bn = bn
-        self.skip_connection = skip_connection
 
-        modules = [torch.nn.ConvTranspose2d(in_dim, out_dim, kernel_size, stride, padding)]
-        if upsample:
-            modules.append(torch.nn.Upsample(scale_factor=2, mode='bilinear'))
-        if bn:
-            modules.append(torch.nn.BatchNorm2d(out_dim))
-        if dropout > 0.0:
-            modules.append(torch.nn.Dropout2d(dropout))
+class DecBlock(torch.nn.Module):
+    def __init__(self, in_dim, out_dim, kernel_size, stride=1, padding=0, bn=False, actv_layer=torch.nn.SiLU(), dropout=0.0, scale=1.0):
+        super().__init__()
+        assert scale >= 1.0, "scale must be greater than or equal to 1.0"
+        upsample = nn.Upsample(scale_factor=scale, mode='bilinear') if scale > 1.0 else None
+        bn = nn.BatchNorm2d(out_dim) if bn else None
+        actv_layer = actv_layer if actv_layer is not None else nn.Identity()
+        dropout = nn.Dropout2d(dropout) if dropout > 0.0 else None
+
+        modules = []
+        if bn is not None:
+            modules.append(bn)
         if actv_layer is not None:
             modules.append(actv_layer)
+        if dropout is not None:
+            modules.append(dropout)
+
+        modules.append(torch.nn.ConvTranspose2d(in_dim, out_dim, kernel_size, stride, padding))
+
+        if upsample is not None:
+            modules.append(upsample)
+
         self.net = torch.nn.Sequential(*modules)
     
     def forward(self, x):
-        y = self.net(x)
-        if self.skip_connection:
-            if self.upsample:
-                skip = torch.nn.functional.interpolate(x, scale_factor=2, mode='bilinear')
-            else:
-                skip = x
-            y += skip
-        return y
+        return self.net(x)
 
         
 class ConvResBlock(nn.Module):

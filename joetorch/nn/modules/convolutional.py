@@ -60,56 +60,78 @@ class DecBlock(torch.nn.Module):
 
         
 class ConvResBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, scale: float = 1.0, dropout: float = 0.0):
+    def __init__(self, in_channels: int, out_channels: int, gn_groups: int, actv_layer: nn.Module = nn.SiLU(), dropout: float = 0.0, do_residual: bool = True, scale: float = 1.0, num_layers: int = 2):
         super().__init__()
 
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.do_gn = gn_groups > 0
+        self.do_actv = actv_layer is not None
+        self.do_dropout = dropout > 0.0
+        self.do_residual = do_residual
         self.scale = scale
+        self.num_layers = num_layers
+
+        assert num_layers > 0, "num_layers must be greater than 0"
+        self.convs = nn.ModuleList([nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)])
+        for _ in range(num_layers-1):
+            self.convs.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1))
+
+        if self.do_gn:
+            self.groupnorms = nn.ModuleList([nn.GroupNorm(gn_groups, in_channels)])
+            for _ in range(num_layers-1):
+                self.groupnorms.append(nn.GroupNorm(gn_groups, out_channels))
+        
+        if self.do_dropout:
+            self.dropout = nn.Dropout2d(dropout)
+
+        if self.do_actv:
+            self.actv_fn = actv_layer
+
+        if self.do_residual:
+            if in_channels == out_channels:
+                self.residual_layer = nn.Identity()
+            else:
+                self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+
         if scale < 1.0:
             stride = int(1 / scale)
             self.down = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=0)
         elif scale > 1.0:
             self.up = nn.Upsample(scale_factor=scale)
 
-        if dropout > 0.0:
-            self.do_dropout = True
-            self.dropout = nn.Dropout2d(dropout)
-        else:
-            self.do_dropout = False
-
-        self.groupnorm_1 = nn.GroupNorm(32, in_channels)
-        self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-
-        self.groupnorm_2 = nn.GroupNorm(32, out_channels)
-        self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-
-        if in_channels == out_channels:
-            self.residual_layer = nn.Identity()
-        else:
-            self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (Batch_Size, Channel, Height, Width)
 
         if self.scale < 1.0:
+            # Downsample input
             x = self.down(x)
 
-        residual = x
+        # Save input for residual connection
+        if self.do_residual:
+            residual = x
+        
+        # Apply layers
+        for i in range(self.num_layers):
+            # Groupnorm
+            if self.do_gn:
+                x = self.groupnorms[i](x)
+            # Activation
+            if self.do_actv:
+                x = self.actv_fn(x)
+            # Dropout
+            if self.do_dropout:
+                x = self.dropout(x)
+            # Convolution
+            x = self.convs[i](x)
 
-        x = self.groupnorm_1(x)
-        x = F.silu(x)
-        if self.do_dropout:
-            x = self.dropout(x)
-        x = self.conv_1(x)
-
-        x = self.groupnorm_2(x)
-        x = F.silu(x)
-        if self.do_dropout:
-            x = self.dropout(x)
-        x = self.conv_2(x)
-
-        x = x + self.residual_layer(residual)
+        if self.do_residual:
+            # Add residual connection
+            x = x + self.residual_layer(residual)
 
         if self.scale > 1.0:
+            # Upsample
             x = self.up(x)
 
         return x

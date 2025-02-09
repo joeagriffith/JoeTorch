@@ -50,8 +50,6 @@ class PreloadedDataset(Dataset):
         
         images = torch.stack(data).to(device)
         targets = torch.stack(targets).to(device)
-        print(f'images dtype: {images.dtype}')
-        print(f'targets dtype: {targets.dtype}')
 
         return PreloadedDataset(images=images, targets=targets, transform=transform, device=device)
 

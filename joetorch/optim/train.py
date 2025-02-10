@@ -25,6 +25,8 @@ def train(
         save_every: Optional[int] = None,
         save_last: bool = False,
         target_networks: Optional[List[Tuple[torch.nn.Module, torch.nn.Module, torch.Tensor]]] = None,
+        max_grad_norm: Optional[float] = None,
+        grad_norm_depth: int = 0,
         **kwargs,
 ):
     """
@@ -93,6 +95,30 @@ def train(
                     torch.cuda.empty_cache()
                 train_metrics = loss_fn(batch, **epoch_loss_args)
                 train_metrics['loss'].backward()
+
+                if max_grad_norm is not None:
+                    if grad_norm_depth == 0:
+                        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                        train_metrics[f'{model.__class__.__name__}_grad_norm'] = grad_norm
+                    else:
+                        def get_submodules(module, depth, prefix=''):
+                            if depth == 0:
+                                return [(prefix.rstrip('.'), module)]
+                            
+                            submods = []
+                            for name, submod in module.named_children():
+                                submod_name = f"{prefix}{name}."
+                                submods.extend(get_submodules(submod, depth-1, submod_name))
+                            return submods if submods else [(prefix.rstrip('.'), module)]
+
+                        for name, submod in get_submodules(model, grad_norm_depth):
+                            if any(p.grad is not None for p in submod.parameters()):
+                                grad_norm = torch.nn.utils.clip_grad_norm_(
+                                    submod.parameters(), 
+                                    max_grad_norm
+                                )
+                                train_metrics[f'{name}_grad_norm'] = grad_norm
+
                 optimiser.step()
             
             for key, value in train_metrics.items():

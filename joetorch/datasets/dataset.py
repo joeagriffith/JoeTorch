@@ -92,27 +92,33 @@ class PreloadedDataset(Dataset):
         return PreloadedDataset(images=images, targets=targets, transform=transform, device=device)
             
     #  Transforms the data in batches so as not to overload memory
-    def update_transformed_images(self, transform_device=torch.device('cuda'), batch_size=500):
+    def update_transformed_images(self, transform_device=torch.device('cuda'), batch_size=512):
         if self.transform is None:
             self.transformed_images = self.images
             return
 
-        if self.transformed_images is None or self.transformed_images.device != self.images.device or self.transformed_images.dtype != self.images.dtype:
-            self.transformed_images = torch.zeros_like(self.images)
-
         if transform_device is None:
             transform_device = self.device
         
+        transformed_images = []
+        targets = []
         low = 0
         high = batch_size
         while low < len(self.images):
             if high > len(self.images):
                 high = len(self.images)
-
-            self.transformed_images[low:high] = self.transform(self.images[low:high].to(transform_device)).to(self.device).detach()
+            out = self.transform(self.images[low:high].to(transform_device))
+            if type(out) == tuple:
+                transformed_images.append(out[0].to(self.device).detach())
+                targets.append(out[1].to(self.device).detach())
+            else:
+                transformed_images.append(out.to(self.device).detach())
             low += batch_size
             high += batch_size
         
+        self.transformed_images = torch.cat(transformed_images)
+        if len(targets) > 0:
+            self.targets = torch.cat(targets)
         
     #  Now a man who needs no introduction
     def __len__(self):

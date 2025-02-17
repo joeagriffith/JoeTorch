@@ -35,10 +35,13 @@ class DecBlock(torch.nn.Module):
     def __init__(self, in_dim, out_dim, kernel_size, stride=1, padding=0, bn=False, actv_layer=torch.nn.SiLU(), dropout=0.0, scale=1.0):
         super().__init__()
         assert scale >= 1.0, "scale must be greater than or equal to 1.0"
-        upsample = nn.Upsample(scale_factor=scale, mode='bilinear') if scale > 1.0 else None
-        bn = nn.BatchNorm2d(out_dim) if bn else None
+
+
+        bn = nn.BatchNorm2d(in_dim) if bn else None
         actv_layer = actv_layer if actv_layer is not None else nn.Identity()
         dropout = nn.Dropout2d(dropout) if dropout > 0.0 else None
+        convt = nn.ConvTranspose2d(in_dim, out_dim, kernel_size, stride, padding)
+        upsample = nn.Upsample(scale_factor=scale, mode='bilinear') if scale > 1.0 else None
 
         modules = []
         if bn is not None:
@@ -48,7 +51,7 @@ class DecBlock(torch.nn.Module):
         if dropout is not None:
             modules.append(dropout)
 
-        modules.append(torch.nn.ConvTranspose2d(in_dim, out_dim, kernel_size, stride, padding))
+        modules.append(convt)
 
         if upsample is not None:
             modules.append(upsample)

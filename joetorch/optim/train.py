@@ -1,11 +1,11 @@
 import os
 import torch
 from joetorch.datasets.dataset import PreloadedDataset
-from torch.utils.tensorboard import SummaryWriter
 from typing import Optional, Union, List, Dict, Tuple
 from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
+import wandb
 
 
 def train(
@@ -15,7 +15,7 @@ def train(
         num_epochs: int,
         batch_size: int,
         val_dataset: Optional[PreloadedDataset] = None,
-        writer: Optional[SummaryWriter] = None,
+        wandb: Optional[wandb.sdk.wandb_run.Run] = None,
         compute_dtype: str = 'float32',
         compile: bool = False,
         epoch_hyperparams: Dict[str, any] = {},
@@ -45,7 +45,14 @@ def train(
         loss_args: Extra arguments to pass to the loss function.
         save_dir: The directory to save the model.
         save_metric: Tuple of ('minimise'/'maximise', 'train'/'val', {metric}).
+        save_every: The number of epochs between saving the model.
+        save_last: Whether to save the model after the last epoch.
+        target_networks: List of tuples of (target_network, network, taus).
+        max_grad_norm: The maximum gradient norm.
+        grad_norm_depth: The depth of the gradient norm to compute.
+        wandb_init: The initialisation arguments for wandb.
     """
+
     assert save_metric[0] in ['minimise', 'maximise']
     assert save_metric[1] in ['train', 'val']
 
@@ -129,9 +136,9 @@ def train(
         for key, value in epoch_train_metrics.items():
             epoch_train_metrics[key] = np.mean(value)
 
-        if writer is not None:
+        if wandb is not None:
             for key, value in epoch_train_metrics.items():
-                writer.add_scalar(f'train/{key}', value, epoch)
+                wandb.log({f'train/{key}': value}, step=epoch)
             
         postfix = {key: round(value.item(), 3) for key, value in epoch_train_metrics.items()}
         # ============================ VALIDATION ============================
@@ -158,9 +165,9 @@ def train(
             for key, value in epoch_val_metrics.items():
                 epoch_val_metrics[key] = np.mean(value)
 
-            if writer is not None:
+            if wandb is not None:
                 for key, value in epoch_val_metrics.items():
-                    writer.add_scalar(f'val/{key}', value, epoch)
+                    wandb.log({f'val/{key}': value}, step=epoch)
             
             for val_key, val_value in epoch_val_metrics.items():
                 val_value = round(val_value.item(), 3)

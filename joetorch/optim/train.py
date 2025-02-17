@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
 import wandb
+from typing import Callable
 
 
 def train(
@@ -15,7 +16,6 @@ def train(
         num_epochs: int,
         batch_size: int,
         val_dataset: Optional[PreloadedDataset] = None,
-        wandb: Optional[wandb.sdk.wandb_run.Run] = None,
         compute_dtype: str = 'float32',
         compile: bool = False,
         epoch_hyperparams: Dict[str, any] = {},
@@ -27,6 +27,7 @@ def train(
         target_networks: Optional[List[Tuple[torch.nn.Module, torch.nn.Module, torch.Tensor]]] = None,
         max_grad_norm: Optional[float] = None,
         grad_norm_depth: int = 0,
+        callback: Optional[Callable] = None,
         **kwargs,
 ):
     """
@@ -127,6 +128,9 @@ def train(
                                 train_metrics[f'{name}_grad_norm'] = grad_norm
 
                 optimiser.step()
+
+            if callback is not None:
+                callback('train_batch_end', locals())
             
             for key, value in train_metrics.items():
                 if key not in epoch_train_metrics:
@@ -136,9 +140,9 @@ def train(
         for key, value in epoch_train_metrics.items():
             epoch_train_metrics[key] = np.mean(value)
 
-        if wandb is not None:
+        if wandb.run is not None:
             for key, value in epoch_train_metrics.items():
-                wandb.log({f'train/{key}': value}, step=epoch)
+                wandb.log({f'train/{key}': value}, step=epoch+1)
             
         postfix = {key: round(value.item(), 3) for key, value in epoch_train_metrics.items()}
         # ============================ VALIDATION ============================
@@ -154,6 +158,9 @@ def train(
                     with torch.autocast(device_type=compute_device.type, dtype=compute_dtype, enabled=compute_dtype is not None):
                         val_metrics = loss_fn(batch, **epoch_loss_args)
 
+                if callback is not None:
+                    callback('val_batch_end', locals())
+
                 for key, value in val_metrics.items():
                     if key not in epoch_val_metrics:
                         epoch_val_metrics[key] = []
@@ -165,9 +172,9 @@ def train(
             for key, value in epoch_val_metrics.items():
                 epoch_val_metrics[key] = np.mean(value)
 
-            if wandb is not None:
+            if wandb.run is not None:
                 for key, value in epoch_val_metrics.items():
-                    wandb.log({f'val/{key}': value}, step=epoch)
+                    wandb.log({f'val/{key}': value}, step=epoch+1)
             
             for val_key, val_value in epoch_val_metrics.items():
                 val_value = round(val_value.item(), 3)
@@ -177,14 +184,11 @@ def train(
                 else:
                     postfix[val_key] = val_value
 
+
         loop.set_postfix(postfix)
 
-        # ============================ TARGET NETWORK UPDATE ============================
-
-        if target_networks is not None:
-            for target_network, network, taus in target_networks:
-                for param, target_param in zip(network.parameters(), target_network.parameters()):
-                    target_param.data.copy_(taus[epoch] * param.data + (1 - taus[epoch]) * target_param.data)
+        if callback is not None:
+            callback('epoch_end', locals())
 
         # ============================ SAVING ============================
 

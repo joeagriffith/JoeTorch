@@ -129,23 +129,23 @@ class ConvSelfAttentionBlock(nn.Module):
 
 
 class ConvCrossAttentionBlock(nn.Module):
-    def __init__(self, in_channels: int, gn_groups: int=32):
+    def __init__(self, q_channels: int, kv_channels: int, gn_groups: int=32):
         super().__init__()
-        self.groupnorm = nn.GroupNorm(gn_groups, in_channels)
-        self.attention = CrossAttention(1, in_channels, in_channels)
+        self.q_groupnorm = nn.GroupNorm(gn_groups, q_channels)
+        self.kv_groupnorm = nn.GroupNorm(gn_groups, kv_channels)
+        self.attention = CrossAttention(1, q_channels, kv_channels)
     
     def forward(self, queries: torch.Tensor, keys_n_values: torch.Tensor) -> torch.Tensor:
 
         # x: (Batch_Size, Channel, Height, Width)
         residual = queries
 
-        queries = self.groupnorm(queries)
-        keys_n_values = self.groupnorm(keys_n_values)
+        queries = self.q_groupnorm(queries)
+        keys_n_values = self.kv_groupnorm(keys_n_values)
         
         n1, c1, h1, w1 = queries.shape
         n2, c2, h2, w2 = keys_n_values.shape
         assert n1 == n2, "Batch size must be the same"
-        assert c1 == c2, "Channel size must be the same"
 
         # (Batch_Size, Channel, Height, Width) -> (Batch_Size, Height*Width, Channel)
         queries = queries.view(n1, c1, h1*w1).permute(0, 2, 1).contiguous()

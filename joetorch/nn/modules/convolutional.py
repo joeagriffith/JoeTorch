@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
+from joetorch.nn.modules.attention import SelfAttention, CrossAttention
+
+
 
 class EncBlock(torch.nn.Module):
     def __init__(self, in_dim, out_dim, kernel_size, stride, padding, pool=False, bn=False, dropout=0.0, actv_layer=torch.nn.SiLU(), skip_connection=False):
@@ -29,6 +33,7 @@ class EncBlock(torch.nn.Module):
                 skip = x
             y += skip
         return y
+
 
 
 class DecBlock(torch.nn.Module):
@@ -61,117 +66,97 @@ class DecBlock(torch.nn.Module):
     def forward(self, x):
         return self.net(x)
 
-        
-class ConvResBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, gn_groups: int, actv_layer: nn.Module = nn.SiLU(), dropout: float = 0.0, do_residual: bool = True, scale: float = 1.0, num_layers: int = 2):
+
+
+class ConvResidualBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, gn_groups: int=32, actv_fn: nn.Module = nn.SiLU()):
         super().__init__()
+        self.groupnorm_1 = nn.GroupNorm(gn_groups, in_channels)
+        self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
 
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.do_gn = gn_groups > 0
-        self.do_actv = actv_layer is not None
-        self.do_dropout = dropout > 0.0
-        self.do_residual = do_residual
-        self.scale = scale
-        self.num_layers = num_layers
+        self.groupnorm_2 = nn.GroupNorm(gn_groups, out_channels)
+        self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
 
-        assert num_layers > 0, "num_layers must be greater than 0"
-        self.convs = nn.ModuleList([nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)])
-        for _ in range(num_layers-1):
-            self.convs.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1))
+        self.actv_fn = actv_fn
 
-        if self.do_gn:
-            self.groupnorms = nn.ModuleList([nn.GroupNorm(gn_groups, in_channels)])
-            for _ in range(num_layers-1):
-                self.groupnorms.append(nn.GroupNorm(gn_groups, out_channels))
-        
-        if self.do_dropout:
-            self.dropout = nn.Dropout2d(dropout)
-
-        if self.do_actv:
-            self.actv_fn = actv_layer
-
-        if self.do_residual:
-            if in_channels == out_channels:
-                self.residual_layer = nn.Identity()
-            else:
-                self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
-
-        if scale < 1.0:
-            stride = int(1 / scale)
-            self.down = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, padding=0)
-        elif scale > 1.0:
-            self.up = nn.Upsample(scale_factor=scale)
-
+        if in_channels == out_channels:
+            self.residual_layer = nn.Identity()
+        else:
+            self.residual_layer = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (Batch_Size, Channel, Height, Width)
 
-        if self.scale < 1.0:
-            # Downsample input
-            x = self.down(x)
+        residual = x
 
-        # Save input for residual connection
-        if self.do_residual:
-            residual = x
+        x = self.groupnorm_1(x)
+        x = self.actv_fn(x)
+        x = self.conv_1(x)
+
+        x = self.groupnorm_2(x)
+        x = self.actv_fn(x)
+        x = self.conv_2(x)
+
+        return x + self.residual_layer(residual)
+
+
+
+class ConvSelfAttentionBlock(nn.Module):
+    def __init__(self, in_channels: int, gn_groups: int=32):
+        super().__init__()
+        self.groupnorm = nn.GroupNorm(gn_groups, in_channels)
+        self.attention = SelfAttention(1, in_channels)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        # x: (Batch_Size, Channel, Height, Width)
+        residual = x
+
+        x = self.groupnorm(x)
         
-        # Apply layers
-        for i in range(self.num_layers):
-            # Groupnorm
-            if self.do_gn:
-                x = self.groupnorms[i](x)
-            # Activation
-            if self.do_actv:
-                x = self.actv_fn(x)
-            # Dropout
-            if self.do_dropout:
-                x = self.dropout(x)
-            # Convolution
-            x = self.convs[i](x)
+        n, c, h, w = x.shape
+        # (Batch_Size, Channel, Height, Width) -> (Batch_Size, Height*Width, Channel)
+        x = x.view(n, c, h*w).permute(0, 2, 1).contiguous()
 
-        if self.do_residual:
-            # Add residual connection
-            x = x + self.residual_layer(residual)
+        # (Batch_Size, Height*Width, Channel) -> (Batch_Size, Height*Width, Channel)
+        x = self.attention(x)
 
-        if self.scale > 1.0:
-            # Upsample
-            x = self.up(x)
+        # (Batch_Size, Height*Width, Channel) -> (Batch_Size, Channel, Height, Width)
+        x = x.permute(0, 2, 1).contiguous().view(n, c, h, w)
 
-        return x
+        return x + residual
 
-# Adapted from https://github.com/locuslab/convmixer/blob/main/convmixer.py
-class Residual(nn.Module):
-    def __init__(self, fn):
+
+
+class ConvCrossAttentionBlock(nn.Module):
+    def __init__(self, in_channels: int, gn_groups: int=32):
         super().__init__()
-        self.fn = fn
+        self.groupnorm = nn.GroupNorm(gn_groups, in_channels)
+        self.attention = CrossAttention(1, in_channels, in_channels)
+    
+    def forward(self, queries: torch.Tensor, keys_n_values: torch.Tensor) -> torch.Tensor:
 
-    def forward(self, x):
-        return self.fn(x) + x
+        # x: (Batch_Size, Channel, Height, Width)
+        residual = queries
 
-# defaults for 128x128 images
-class ConvMixer(nn.Module):
-    def __init__(self, in_dim, out_dim, depth, kernel_size=5, patch_size=4):
-        super().__init__()
-        self.net = nn.Sequential(
-        nn.Conv2d(in_dim, out_dim, kernel_size=patch_size, stride=patch_size),
-        nn.GELU(),
-        nn.BatchNorm2d(out_dim),
-        *[nn.Sequential(
-                Residual(nn.Sequential(
-                    nn.Conv2d(out_dim, out_dim, kernel_size, groups=out_dim, padding="same"),
-                    nn.GELU(),
-                    nn.BatchNorm2d(out_dim)
-                )),
-                nn.Conv2d(out_dim, out_dim, kernel_size=1),
-                nn.GELU(),
-                nn.BatchNorm2d(out_dim)
-        ) for i in range(depth)],
-        nn.AdaptiveAvgPool2d((1,1)),
-        nn.Flatten(),
-        )
+        queries = self.groupnorm(queries)
+        keys_n_values = self.groupnorm(keys_n_values)
+        
+        n1, c1, h1, w1 = queries.shape
+        n2, c2, h2, w2 = keys_n_values.shape
+        assert n1 == n2, "Batch size must be the same"
+        assert c1 == c2, "Channel size must be the same"
 
-    def forward(self, x, stop_at=None):
-        if stop_at == 0:
-            return x
-        else: 
-            return self.net(x)
+        # (Batch_Size, Channel, Height, Width) -> (Batch_Size, Height*Width, Channel)
+        queries = queries.view(n1, c1, h1*w1).permute(0, 2, 1).contiguous()
+        keys_n_values = keys_n_values.view(n2, c2, h2*w2).permute(0, 2, 1).contiguous()
+
+        # (Batch_Size, Height*Width, Channel) -> (Batch_Size, Height*Width, Channel)
+        x = self.attention(queries, keys_n_values)
+
+        # (Batch_Size, Height*Width, Channel) -> (Batch_Size, Channel, Height, Width)
+        x = x.permute(0, 2, 1).contiguous().view(n1, c1, h1, w1)
+
+        return x + residual
+
+

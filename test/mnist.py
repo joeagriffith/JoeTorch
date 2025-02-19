@@ -46,7 +46,7 @@ cfg['trial_name'] = 'mlp_ae_mseloss'
 cfg['mode'] = 'mlp'
 model = MNIST_AE(out_dim=cfg['out_dim'], mode=cfg['mode']).to(cfg['device'])
 optimiser = get_optimiser(model, optim='AdamW')
-wandb.init(entity='joeagriffith-home', project='joetorch', name=cfg['trial_name'], config=cfg)
+wandb.init(entity='joeagriffith-home', project='joetorch', name=cfg['trial_name'], config=cfg, dir=cfg['out_dir'])
 wandb.log({'model': str(model).replace('\n', '<br/>').replace(' ', '&nbsp;')})
 save_dir = cfg['out_dir'] + f'{cfg['experiment_name']}/models/{cfg['trial_name']}'
 train(
@@ -65,7 +65,7 @@ cfg['trial_name'] = 'cnn_ae_mseloss'
 cfg['mode'] = 'cnn'
 model = MNIST_AE(out_dim=cfg['out_dim'], mode=cfg['mode']).to(cfg['device'])
 optimiser = get_optimiser(model, optim='AdamW')
-wandb.init(entity='joeagriffith-home', project='joetorch', name=cfg['trial_name'], config=epoch_hyperparams)
+wandb.init(entity='joeagriffith-home', project='joetorch', name=cfg['trial_name'], config=epoch_hyperparams, dir=cfg['out_dir'])
 wandb.log({'model': str(model).replace('\n', '<br/>').replace(' ', '&nbsp;')})
 save_dir = cfg['out_dir'] + f'{cfg['experiment_name']}/models/{cfg['trial_name']}'
 train(
